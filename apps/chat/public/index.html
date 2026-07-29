@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="A private, local workspace for reusable business agents."
+    />
+    <title>Project Manager</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="/agent.config.js" defer></script>
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#message-input">Skip to message box</a>
+
+    <main class="app-shell">
+      <aside class="agent-panel" aria-labelledby="agent-name">
+        <div>
+          <div class="brand">
+            <span class="brand__mark" id="agent-initials" aria-hidden="true">PM</span>
+            <div>
+              <p class="brand__eyebrow">My local agent</p>
+              <h1 id="agent-name">Project Manager</h1>
+            </div>
+          </div>
+
+          <p class="agent-panel__subtitle" id="agent-subtitle">
+            Turn meetings, documents, and project ideas into clear next actions.
+          </p>
+
+          <div class="local-status">
+            <span class="local-status__dot" aria-hidden="true"></span>
+            <span>Local app · responses use your Claude API</span>
+          </div>
+        </div>
+
+        <section class="agent-selector" aria-labelledby="agent-selector-title">
+          <p class="section-label" id="agent-selector-title">Agents</p>
+          <div class="agent-list" id="agent-list" role="list"></div>
+        </section>
+
+        <p class="privacy-note">
+          <span aria-hidden="true">✦</span>
+          Files are prepared locally, then relevant text is sent to Claude when
+          you ask the agent.
+        </p>
+      </aside>
+
+      <section class="chat-card" aria-labelledby="conversation-title">
+        <header class="chat-header">
+          <div class="chat-header__identity">
+            <span class="mobile-mark" id="mobile-agent-initials" aria-hidden="true">
+              PM
+            </span>
+            <div>
+              <p class="chat-header__kicker">Conversation</p>
+              <h2 id="conversation-title">Ask <span id="conversation-agent-name">Project Manager</span></h2>
+            </div>
+          </div>
+
+          <button class="reset-button" id="reset-button" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M4.93 4.93a10 10 0 1 1-1.79 11.46M3 8V3m0 0h5"
+                fill="none"
+                stroke="currentColor"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="1.8"
+              />
+            </svg>
+            <span>New conversation</span>
+          </button>
+        </header>
+
+        <div
+          class="conversation"
+          id="conversation"
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
+          aria-busy="false"
+          tabindex="-1"
+        ></div>
+
+        <div class="composer-area">
+          <section class="suggestions" id="suggestions" aria-labelledby="suggestions-title">
+            <p class="section-label" id="suggestions-title">Try an example</p>
+            <div class="suggestion-list" id="suggestion-list"></div>
+          </section>
+
+          <section
+            class="document-context"
+            id="document-context"
+            aria-labelledby="document-context-title"
+          >
+            <div class="document-context__header">
+              <div>
+                <p class="section-label" id="document-context-title">
+                  Meeting notes and documents
+                </p>
+                <p class="document-context__hint">
+                  Add PDF, DOCX, TXT, or paste a long transcript. Avoid secrets
+                  you would not send to Claude.
+                </p>
+              </div>
+              <div class="document-actions">
+                <button class="secondary-button" id="upload-button" type="button">
+                  Upload file
+                </button>
+                <button class="secondary-button" id="paste-button" type="button">
+                  Paste text
+                </button>
+              </div>
+            </div>
+            <input
+              id="file-input"
+              type="file"
+              accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+              hidden
+            />
+            <div
+              class="document-list"
+              id="document-list"
+              aria-live="polite"
+            ></div>
+            <p class="document-status" id="document-status" role="status"></p>
+          </section>
+
+          <form class="composer" id="chat-form">
+            <label class="visually-hidden" for="message-input">
+              Message your project manager
+            </label>
+            <div class="composer__field">
+              <textarea
+                id="message-input"
+                name="message"
+                rows="1"
+                maxlength="8000"
+                placeholder="What should the Project Manager do?"
+                autocomplete="off"
+                required
+              ></textarea>
+              <span class="character-count" id="character-count" aria-hidden="true">
+                0 / 8000
+              </span>
+            </div>
+            <button class="send-button" id="send-button" type="submit">
+              <span id="send-button-label">Send</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="m5 12 14-7-4.5 14-2.8-5.7L5 12Z"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="1.8"
+                />
+              </svg>
+            </button>
+          </form>
+
+          <div class="composer-meta">
+            <p id="request-status" role="status" aria-live="polite">
+              Press Enter to send · Shift + Enter for a new line
+            </p>
+            <p>Local workshop build</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <dialog class="paste-dialog" id="paste-dialog">
+      <form class="paste-dialog__card" id="paste-form">
+        <div>
+          <p class="section-label">Add pasted context</p>
+          <h2>Paste a transcript or document</h2>
+          <p>
+            The text is prepared locally and sent to Claude with your next
+            request.
+          </p>
+        </div>
+        <label for="pasted-name">Document name</label>
+        <input
+          id="pasted-name"
+          name="pasted-name"
+          maxlength="120"
+          value="Pasted transcript"
+        />
+        <label for="pasted-text">Text</label>
+        <textarea
+          id="pasted-text"
+          name="pasted-text"
+          maxlength="150000"
+          rows="12"
+          placeholder="Paste up to 150,000 characters here…"
+          required
+        ></textarea>
+        <div class="paste-dialog__actions">
+          <button class="secondary-button" id="paste-cancel" type="button">
+            Cancel
+          </button>
+          <button class="send-button" type="submit">Add context</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
+</html>
