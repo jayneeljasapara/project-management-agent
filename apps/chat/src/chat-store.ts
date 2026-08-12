@@ -3,7 +3,7 @@ import { chmodSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const DEFAULT_TITLE = "New conversation";
 const MAX_TITLE_LENGTH = 80;
 const MAX_SEARCH_LENGTH = 200;
@@ -108,9 +108,65 @@ export interface DomainResearchJobRecord {
   jobId: string;
   sessionId: string;
   domain: string;
-  status: "queued" | "completed" | "partial";
+  status: "queued" | "completed" | "partial" | "failed";
   createdAt: string;
   updatedAt: string;
+}
+
+export type PaidResearchStatus = "completed" | "partial" | "failed";
+export type PaidResearchDepth = "refresh" | "standard" | "deep";
+export type PaidComponentStatus =
+  | "success"
+  | "no_results"
+  | "failed"
+  | "unavailable"
+  | "skipped";
+
+export interface SeoSnapshotInput {
+  schemaVersion: 1;
+  jobId: string;
+  status: PaidResearchStatus;
+  researchDepth: PaidResearchDepth;
+  domain: string;
+  locationCode: number;
+  languageCode: string;
+  device: "desktop" | "mobile";
+  costLimitUsd: number;
+  actualCostUsd: number;
+  componentStatus: Record<string, PaidComponentStatus>;
+  offeringProfile: Record<string, unknown>;
+  rankedKeywords: Array<Record<string, unknown>>;
+  keywordCandidates: Array<Record<string, unknown>>;
+  selectedKeywords: Array<Record<string, unknown>>;
+  seoCompetitors: Array<Record<string, unknown>>;
+  serpEvidence: Array<Record<string, unknown>>;
+  sources: Array<Record<string, unknown>>;
+  warnings: string[];
+  evidenceSummary: Record<string, unknown>;
+  capturedAt?: string;
+  expiresAt?: string;
+}
+
+export interface SeoSnapshotRecord extends SeoSnapshotInput {
+  snapshotId: string;
+  sessionId: string;
+  capturedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SeoSnapshotSummary {
+  snapshotId: string;
+  jobId: string;
+  status: PaidResearchStatus;
+  researchDepth: PaidResearchDepth;
+  domain: string;
+  locationCode: number;
+  languageCode: string;
+  actualCostUsd: number;
+  capturedAt: string;
+  updatedAt: string;
+  warningCount: number;
 }
 
 export interface BusinessMemorySummary {
@@ -208,6 +264,35 @@ interface BusinessMemoryRow {
   updated_at: string;
 }
 
+interface SeoSnapshotRow {
+  snapshot_id: string;
+  job_id: string;
+  session_id: string;
+  schema_version: number;
+  status: PaidResearchStatus;
+  research_depth: PaidResearchDepth;
+  domain: string;
+  location_code: number;
+  language_code: string;
+  device: "desktop" | "mobile";
+  cost_limit_usd: number;
+  actual_cost_usd: number;
+  component_status_json: string;
+  offering_profile_json: string;
+  ranked_keywords_json: string;
+  keyword_candidates_json: string;
+  selected_keywords_json: string;
+  seo_competitors_json: string;
+  serp_evidence_json: string;
+  sources_json: string;
+  warnings_json: string;
+  evidence_summary_json: string;
+  captured_at: string;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -261,6 +346,40 @@ function businessMemoryFromRow(row: BusinessMemoryRow): BusinessMemoryRecord {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function seoSnapshotFromRow(row: SeoSnapshotRow): SeoSnapshotRecord {
+  const result: SeoSnapshotRecord = {
+    schemaVersion: 1,
+    snapshotId: row.snapshot_id,
+    jobId: row.job_id,
+    sessionId: row.session_id,
+    status: row.status,
+    researchDepth: row.research_depth,
+    domain: row.domain,
+    locationCode: Number(row.location_code),
+    languageCode: row.language_code,
+    device: row.device,
+    costLimitUsd: Number(row.cost_limit_usd),
+    actualCostUsd: Number(row.actual_cost_usd),
+    componentStatus: JSON.parse(row.component_status_json) as Record<string, PaidComponentStatus>,
+    offeringProfile: JSON.parse(row.offering_profile_json) as Record<string, unknown>,
+    rankedKeywords: JSON.parse(row.ranked_keywords_json) as Array<Record<string, unknown>>,
+    keywordCandidates: JSON.parse(row.keyword_candidates_json) as Array<Record<string, unknown>>,
+    selectedKeywords: JSON.parse(row.selected_keywords_json) as Array<Record<string, unknown>>,
+    seoCompetitors: JSON.parse(row.seo_competitors_json) as Array<Record<string, unknown>>,
+    serpEvidence: JSON.parse(row.serp_evidence_json) as Array<Record<string, unknown>>,
+    sources: JSON.parse(row.sources_json) as Array<Record<string, unknown>>,
+    warnings: JSON.parse(row.warnings_json) as string[],
+    evidenceSummary: JSON.parse(row.evidence_summary_json) as Record<string, unknown>,
+    capturedAt: row.captured_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+  if (row.expires_at !== null) {
+    result.expiresAt = row.expires_at;
+  }
+  return result;
 }
 
 function encodeCursor(updatedAt: string, id: string): string {
