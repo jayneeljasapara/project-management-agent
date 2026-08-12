@@ -98,6 +98,11 @@ const paths = {
   operationLock: join(projectRoot, "data", "run", "operation.lock"),
 };
 
+// Chat-database schema versions this runner accepts. Schema 1 is durable chat
+// history; schema 2 adds the domain-research business-memory tables. Both are
+// created by apps/chat/src/chat-store.ts, so both are healthy here.
+const SUPPORTED_CHAT_SCHEMA_VERSIONS = [1, 2];
+
 const workflowIds = {
   main: "phase3StartHere",
   health: "phase3AgentHealth",
@@ -1788,7 +1793,10 @@ async function commandRestore(args) {
       return 1;
     }
     const chatCheck = sqliteQuickCheck(chatBackupDatabase);
-    if (!chatCheck.ok || chatCheck.schemaVersion !== 1) {
+    if (
+      !chatCheck.ok ||
+      !SUPPORTED_CHAT_SCHEMA_VERSIONS.includes(chatCheck.schemaVersion)
+    ) {
       printError("The backed-up chat database failed its integrity or schema check. No local data was changed.");
       return 1;
     }
@@ -1962,8 +1970,13 @@ async function commandDiagnose() {
   }
   if (existsSync(paths.chatDatabase)) {
     const chatDatabaseCheck = sqliteQuickCheck(paths.chatDatabase);
-    if (chatDatabaseCheck.ok && chatDatabaseCheck.schemaVersion === 1) {
-      ok("The local chat database and search index are ready (schema 1).");
+    if (
+      chatDatabaseCheck.ok &&
+      SUPPORTED_CHAT_SCHEMA_VERSIONS.includes(chatDatabaseCheck.schemaVersion)
+    ) {
+      ok(
+        `The local chat database and search index are ready (schema ${chatDatabaseCheck.schemaVersion}).`,
+      );
     } else {
       failure(
         "The local chat database failed its integrity or schema check. Create a private backup before troubleshooting it.",
