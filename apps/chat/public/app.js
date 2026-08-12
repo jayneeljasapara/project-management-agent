@@ -175,6 +175,22 @@
       : activeAgent()?.name ?? config.name;
   }
 
+  // Only the Project Manager greeting is learner-editable in agent.config.js.
+  // Every other active agent introduces itself from the server registry, so a
+  // second agent never claims to be the Project Manager.
+  function displayWelcomeMessage() {
+    if (activeAgentId === "project-manager") {
+      return config.welcomeMessage;
+    }
+    const agent = activeAgent();
+    if (!agent) {
+      return config.welcomeMessage;
+    }
+    // The registry description is third person and already renders as the
+    // panel subtitle, so repeating it here would read oddly and twice.
+    return `Hello! I’m your ${agent.name} agent. Tell me what you need and I’ll help.`;
+  }
+
   function getInitials(name) {
     return name
       .split(/\s+/)
@@ -647,7 +663,7 @@
       elements.conversation.append(older);
     }
     if (currentMessages.length === 0) {
-      addMessage("agent", config.welcomeMessage, [], { scroll: false });
+      addMessage("agent", displayWelcomeMessage(), [], { scroll: false });
       elements.suggestions.hidden = false;
     } else {
       elements.suggestions.hidden = true;
@@ -923,7 +939,7 @@
 
   function renderNewConversation() {
     elements.conversation.replaceChildren();
-    addMessage("agent", config.welcomeMessage);
+    addMessage("agent", displayWelcomeMessage());
     elements.suggestions.hidden = false;
     elements.input.value = "";
     updateCharacterCount();
