@@ -190,7 +190,9 @@ if (agentWorkflow) {
     "Validation: document count and text-size limits are missing",
   );
   check(
-    /agentId !== 'project-manager'/.test(validationCode),
+    /\[\s*'project-manager',\s*'sales'\s*\]\.includes\(agentId\)/.test(
+      validationCode,
+    ),
     "Validation: active agent allow-list check is missing",
   );
   check(
@@ -1157,6 +1159,8 @@ const OPTIONAL_SKILL_IDS = [
   "deal-desk",
   "customer-support",
   "domain-research",
+  "linkedin-profile-lookup",
+  "linkedin-prospect-search",
 ];
 
 const skillBundle = await compileSkills(join(projectRoot, "skills"));
