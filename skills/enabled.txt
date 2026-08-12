@@ -6,5 +6,6 @@ task-capture
 weekly-status
 paid-domain-research
 domain-research
+seo-article-writer
 linkedin-profile-lookup
 linkedin-prospect-search
