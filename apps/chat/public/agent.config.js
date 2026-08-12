@@ -8,10 +8,10 @@
  */
 window.AGENT_CONFIG = Object.freeze({
   name: "Project Manager",
-  subtitle: "Turn meetings, documents, and project ideas into clear next actions.",
+  subtitle: "Turns meetings, documents and ideas into clear next steps.",
   welcomeMessage:
-    "Hello! I’m your Project Manager. Add a meeting transcript or tell me what you’re working on, and I’ll help turn it into decisions, plans, and safe next actions.",
-  primaryColour: "#6D4AFF",
+    "Hi Jayneel. Tell me what you are working on, or drop in a meeting transcript. I will give you the short version and the next steps.",
+  primaryColour: "#192a48",
   examplePrompts: [
     "Turn these meeting notes into decisions and action items",
     "Build a practical project plan from this document",

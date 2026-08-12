@@ -1,11 +1,14 @@
 :root {
-  --brand-primary: #6d4aff;
-  --ink: #211d31;
-  --muted: #686378;
-  --line: #e7e3ee;
-  --panel: #f2efff;
+  /* Sports Insight Media brand: navy, lime green, green, white. */
+  --brand-primary: #192a48;
+  --brand-accent: #a5c819;
+  --brand-green: #279b5d;
+  --ink: #16233a;
+  --muted: #5d6b80;
+  --line: #dfe4ec;
+  --panel: #eef1f6;
   --surface: #ffffff;
-  --warm-white: #faf9fc;
+  --warm-white: #f8fafc;
   color-scheme: light;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
@@ -31,9 +34,9 @@ body {
   min-height: 100dvh;
   margin: 0;
   background:
-    radial-gradient(circle at 9% 8%, rgb(109 74 255 / 16%), transparent 24rem),
-    radial-gradient(circle at 92% 90%, rgb(248 174 103 / 13%), transparent 28rem),
-    #efedf3;
+    radial-gradient(circle at 9% 8%, rgb(25 42 72 / 12%), transparent 24rem),
+    radial-gradient(circle at 92% 90%, rgb(165 200 25 / 16%), transparent 28rem),
+    #eef1f6;
 }
 
 button,
@@ -104,6 +107,14 @@ textarea:focus-visible,
 
 .history-close {
   display: none;
+}
+
+.brand__logo {
+  display: block;
+  width: 100%;
+  max-width: 13rem;
+  height: auto;
+  margin-bottom: 1.25rem;
 }
 
 .brand {

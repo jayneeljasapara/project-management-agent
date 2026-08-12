@@ -248,7 +248,11 @@
     elements.conversationAgentName.textContent = name;
     elements.conversationTitleText.textContent = activeConversationTitle;
     elements.input.setAttribute("aria-label", `Message ${name}`);
-    elements.input.placeholder = `What should the ${name} do?`;
+    // "Sales" needs the noun to read as a sentence; "Project Manager" does not.
+    elements.input.placeholder =
+      activeAgentId === "project-manager"
+        ? `What should the ${name} do?`
+        : `What should your ${name} agent do?`;
 
     const initials = getInitials(name);
     elements.agentInitials.textContent = initials;

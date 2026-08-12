@@ -1161,6 +1161,7 @@ const OPTIONAL_SKILL_IDS = [
   "domain-research",
   "linkedin-profile-lookup",
   "linkedin-prospect-search",
+  "house-style",
 ];
 
 const skillBundle = await compileSkills(join(projectRoot, "skills"));
