@@ -101,7 +101,7 @@ const paths = {
 // Chat-database schema versions this runner accepts. Schema 1 is durable chat
 // history; schema 2 adds the domain-research business-memory tables. Both are
 // created by apps/chat/src/chat-store.ts, so both are healthy here.
-const SUPPORTED_CHAT_SCHEMA_VERSIONS = [1, 2];
+const SUPPORTED_CHAT_SCHEMA_VERSIONS = [1, 2, 3];
 
 const workflowIds = {
   main: "phase3StartHere",

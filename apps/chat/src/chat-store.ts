@@ -552,6 +552,74 @@ export class ChatStore {
         `);
       });
     }
+    if (version < 3) {
+      // Additive step for paid domain research. Existing conversations, saved
+      // business memory, and research jobs are rebuilt in place rather than
+      // dropped, and the guard above makes the whole step repeatable.
+      this.transaction(() => {
+        this.database.exec(`
+          DROP INDEX domain_research_jobs_session;
+          ALTER TABLE domain_research_jobs RENAME TO domain_research_jobs_v2;
+
+          CREATE TABLE domain_research_jobs (
+            job_id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            domain TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('queued', 'completed', 'partial', 'failed')),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          ) STRICT;
+
+          INSERT INTO domain_research_jobs(
+            job_id, session_id, domain, status, created_at, updated_at
+          )
+          SELECT job_id, session_id, domain, status, created_at, updated_at
+          FROM domain_research_jobs_v2;
+
+          DROP TABLE domain_research_jobs_v2;
+
+          CREATE INDEX domain_research_jobs_session
+          ON domain_research_jobs(session_id, updated_at DESC);
+
+          CREATE TABLE seo_snapshots (
+            snapshot_id TEXT PRIMARY KEY,
+            job_id TEXT NOT NULL UNIQUE,
+            session_id TEXT NOT NULL,
+            schema_version INTEGER NOT NULL CHECK (schema_version = 1),
+            status TEXT NOT NULL CHECK (status IN ('completed', 'partial', 'failed')),
+            research_depth TEXT NOT NULL CHECK (research_depth IN ('refresh', 'standard', 'deep')),
+            domain TEXT NOT NULL,
+            location_code INTEGER NOT NULL,
+            language_code TEXT NOT NULL,
+            device TEXT NOT NULL CHECK (device IN ('desktop', 'mobile')),
+            cost_limit_usd REAL NOT NULL CHECK (cost_limit_usd >= 0),
+            actual_cost_usd REAL NOT NULL CHECK (actual_cost_usd >= 0),
+            component_status_json TEXT NOT NULL,
+            offering_profile_json TEXT NOT NULL,
+            ranked_keywords_json TEXT NOT NULL,
+            keyword_candidates_json TEXT NOT NULL,
+            selected_keywords_json TEXT NOT NULL,
+            seo_competitors_json TEXT NOT NULL,
+            serp_evidence_json TEXT NOT NULL,
+            sources_json TEXT NOT NULL,
+            warnings_json TEXT NOT NULL,
+            evidence_summary_json TEXT NOT NULL,
+            captured_at TEXT NOT NULL,
+            expires_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          ) STRICT;
+
+          CREATE INDEX seo_snapshots_domain_captured
+          ON seo_snapshots(domain, captured_at DESC);
+
+          CREATE INDEX seo_snapshots_session_updated
+          ON seo_snapshots(session_id, updated_at DESC);
+
+          PRAGMA user_version = 3;
+        `);
+      });
+    }
     this.database.prepare("SELECT rowid FROM message_search LIMIT 1").all();
     this.database.prepare("SELECT domain FROM business_memory LIMIT 1").all();
     this.database.prepare("SELECT job_id FROM domain_research_jobs LIMIT 1").all();
