@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "## On-demand picture for a post\nMakes one picture from a description the current user asked for, using the reviewed Higgsfield endpoint and your own stored credential.\n\nIt saves the picture into this conversation and shows it in the chat. It never publishes anywhere, never posts to social, and never runs on a schedule. A refusal or a failure is reported plainly instead of being retried.",
+        "content": "## On-demand picture for a post\nMakes one picture from a description the current user asked for, using the reviewed Gemini image endpoint and your own stored credential.\n\nIt saves the picture into this conversation and shows it in the chat. It never publishes anywhere, never posts to social, and never runs on a schedule. A refusal or a failure is reported plainly instead of being retried.",
         "height": 320,
         "width": 620,
         "color": 4
@@ -106,12 +106,12 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://platform.higgsfield.ai/higgsfield-ai/soul/standard",
+        "url": "https://generativelanguage.googleapis.com/v1beta/interactions",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ prompt: $json.prompt, aspect_ratio: $json.aspectRatio, resolution: '1080p' }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: 'gemini-2.5-flash-image', input: [{ type: 'text', text: $json.prompt }], response_format: { type: 'image', mime_type: 'image/png', aspect_ratio: $json.aspectRatio } }) }}",
         "options": {
           "response": {
             "response": {
@@ -127,11 +127,11 @@
         460
       ],
       "id": "a1400000-0000-4000-8000-000000000003",
-      "name": "Request Higgsfield Image",
+      "name": "Request Gemini Image",
       "credentials": {
         "httpHeaderAuth": {
-          "id": "phase14Higgsfield",
-          "name": "Higgsfield API"
+          "id": "phase14GeminiImage",
+          "name": "Gemini Image API"
         }
       }
     },
@@ -139,7 +139,7 @@
       "parameters": {
         "mode": "runOnceForEachItem",
         "language": "javaScript",
-        "jsCode": "const b=$json;\nconst requestIdRemote=typeof b.request_id==='string'?b.request_id:'';\nconst statusUrl=typeof b.status_url==='string'?b.status_url:'';\nconst ok=Boolean(requestIdRemote)&&/^https:\\/\\/platform\\.higgsfield\\.ai\\/requests\\//.test(statusUrl);\nreturn {json:{submitted:ok,statusUrl,remoteRequestId:requestIdRemote,attempts:0,\n  ...(ok?{}:{response:{ok:false,error:{code:'IMAGE_PROVIDER_UNAVAILABLE',message:'The picture service did not accept the request. Nothing was charged for a picture that was not made.'}}})}};"
+        "jsCode": "const b=$json;\n// Walk the response for the first image block. The bytes come back inline as\n// base64, so nothing is downloaded from a provider URL.\nlet data='',mime='image/png';\nconst steps=Array.isArray(b.steps)?b.steps:[];\nfor(const step of steps){\n  const content=Array.isArray(step&&step.content)?step.content:[];\n  for(const block of content){\n    if(block&&block.type==='image'&&typeof block.data==='string'&&block.data){\n      data=block.data;\n      if(typeof block.mime_type==='string'&&block.mime_type)mime=block.mime_type;\n      break;\n    }\n  }\n  if(data)break;\n}\nif(!data&&b.output_image&&typeof b.output_image.data==='string'){\n  data=b.output_image.data;\n  if(typeof b.output_image.mime_type==='string'&&b.output_image.mime_type)mime=b.output_image.mime_type;\n}\nconst blocked=typeof b.error==='object'&&b.error&&/safety|blocked|policy/i.test(JSON.stringify(b.error));\nconst ready=Boolean(data);\nlet response=null;\nif(!ready){\n  response=blocked\n    ?{ok:false,error:{code:'IMAGE_REJECTED',message:'The picture service refused that description. Try describing it differently.'}}\n    :{ok:false,error:{code:'IMAGE_FAILED',message:'The picture could not be made. Nothing was saved.'}};\n}\nreturn {json:{ready,imageBase64:data,contentType:mime,...(response?{response}:{})}};"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -148,7 +148,7 @@
         460
       ],
       "id": "c1400000-0000-4000-8000-000000000620",
-      "name": "Check Submission"
+      "name": "Check Gemini Image"
     },
     {
       "parameters": {
@@ -162,7 +162,7 @@
           "conditions": [
             {
               "id": "b140-submitted",
-              "leftValue": "={{ $json.submitted }}",
+              "leftValue": "={{ $json.ready }}",
               "rightValue": true,
               "operator": {
                 "type": "boolean",
@@ -182,98 +182,7 @@
         460
       ],
       "id": "d1400000-0000-4000-8000-000000000840",
-      "name": "Submitted?"
-    },
-    {
-      "parameters": {
-        "amount": 5
-      },
-      "type": "n8n-nodes-base.wait",
-      "typeVersion": 1.1,
-      "position": [
-        1060,
-        360
-      ],
-      "id": "a1400000-0000-4000-8000-000000000004",
-      "name": "Wait For Picture",
-      "webhookId": "a1400000-0000-4000-8000-000000000099"
-    },
-    {
-      "parameters": {
-        "url": "={{ $('Check Submission').first().json.statusUrl }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "options": {
-          "response": {
-            "response": {
-              "neverError": true
-            }
-          }
-        }
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1280,
-        360
-      ],
-      "id": "a1400000-0000-4000-8000-000000000005",
-      "name": "Poll Picture Status",
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "phase14Higgsfield",
-          "name": "Higgsfield API"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "mode": "runOnceForEachItem",
-        "language": "javaScript",
-        "jsCode": "const prev=$('Check Submission').first().json;\nconst attempts=Number($json.attempts??prev.attempts??0)+1;\nconst s=$json;\nconst status=typeof s.status==='string'?s.status:'unknown';\nconst terminal=['completed','failed','nsfw','canceled'].includes(status);\nconst imageUrl=Array.isArray(s.images)&&s.images[0]&&typeof s.images[0].url==='string'?s.images[0].url:'';\n// 40 polls at 5 seconds is a little over three minutes, then we stop and say so\n// rather than leaving the request hanging.\nconst exhausted=attempts>=40;\nconst done=terminal||exhausted;\nlet response=null;\nif(status==='completed'&&imageUrl){response=null;}\nelse if(status==='nsfw'){response={ok:false,error:{code:'IMAGE_REJECTED',message:'The picture service refused that description. Try describing it differently.'}};}\nelse if(status==='failed'||status==='canceled'){response={ok:false,error:{code:'IMAGE_FAILED',message:'The picture could not be made. Nothing was saved.'}};}\nelse if(exhausted){response={ok:false,error:{code:'IMAGE_TIMED_OUT',message:'The picture is taking longer than expected. Ask again in a moment.'}};}\nelse if(terminal&&!imageUrl){response={ok:false,error:{code:'IMAGE_MISSING',message:'The picture service finished without returning a picture.'}};}\nreturn {json:{attempts,status,statusUrl:prev.statusUrl,imageUrl,done,ready:status==='completed'&&Boolean(imageUrl),...(response?{response}:{})}};"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1500,
-        360
-      ],
-      "id": "c1400000-0000-4000-8000-000000001500",
-      "name": "Check Picture Status"
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 2
-          },
-          "conditions": [
-            {
-              "id": "b140-done",
-              "leftValue": "={{ $json.done }}",
-              "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        1720,
-        360
-      ],
-      "id": "d1400000-0000-4000-8000-000000001720",
-      "name": "Picture Done?"
+      "name": "Picture Ready?"
     },
     {
       "parameters": {
@@ -315,7 +224,7 @@
         "url": "http://127.0.0.1:3000/api/generated-images",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ sessionId: $('Validate Image Request').first().json.sessionId, agentId: 'seo', jobId: $('Validate Image Request').first().json.jobId, prompt: $('Validate Image Request').first().json.prompt, aspectRatio: $('Validate Image Request').first().json.aspectRatio, provider: 'higgsfield', model: 'soul/standard', sourceUrl: $json.imageUrl }) }}",
+        "jsonBody": "={{ JSON.stringify({ sessionId: $('Validate Image Request').first().json.sessionId, agentId: 'seo', jobId: $('Validate Image Request').first().json.jobId, prompt: $('Validate Image Request').first().json.prompt, aspectRatio: $('Validate Image Request').first().json.aspectRatio, provider: 'gemini', model: 'gemini-2.5-flash-image', contentType: $json.contentType, imageBase64: $json.imageBase64 }) }}",
         "options": {
           "response": {
             "response": {
@@ -457,97 +366,6 @@
         ]
       ]
     },
-    "Request Higgsfield Image": {
-      "main": [
-        [
-          {
-            "node": "Check Submission",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Check Submission": {
-      "main": [
-        [
-          {
-            "node": "Submitted?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Submitted?": {
-      "main": [
-        [
-          {
-            "node": "Wait For Picture",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Prepare Audit",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Wait For Picture": {
-      "main": [
-        [
-          {
-            "node": "Poll Picture Status",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Poll Picture Status": {
-      "main": [
-        [
-          {
-            "node": "Check Picture Status",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Check Picture Status": {
-      "main": [
-        [
-          {
-            "node": "Picture Done?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Picture Done?": {
-      "main": [
-        [
-          {
-            "node": "Picture Ready?",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Wait For Picture",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Picture Ready?": {
       "main": [
         [
@@ -609,12 +427,34 @@
           }
         ]
       ]
+    },
+    "Request Gemini Image": {
+      "main": [
+        [
+          {
+            "node": "Check Gemini Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Gemini Image": {
+      "main": [
+        [
+          {
+            "node": "Picture Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
   "settings": {
     "executionOrder": "v1",
-    "executionTimeout": 300,
+    "executionTimeout": 180,
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "all",
     "saveExecutionProgress": true,
@@ -627,7 +467,7 @@
     "toolRisk": "paid_external_write_free_local_save",
     "authorization": "direct-current-user-picture-request",
     "externalWrite": "none",
-    "externalRead": "fixed-higgsfield-endpoints-only",
+    "externalRead": "fixed-gemini-image-endpoint-only",
     "localWrite": "conversation-bound-generated-image",
     "paidCallPolicy": "one-request-per-ask-no-automatic-retry"
   },

@@ -2084,18 +2084,55 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
             if (!prompt) {
               throw new PublicError(400, "INVALID_REQUEST", "The image needs a prompt.");
             }
+            // Two shapes arrive here. Providers that hand back a URL are
+            // fetched over the DNS-safe reader; providers that inline the
+            // bytes as base64 are decoded directly, with no outbound request.
             const sourceUrl = businessMemoryText(candidate.sourceUrl, "image URL", 2_000);
-            let fetched;
-            try {
-              fetched = await fetchPublicImage(sourceUrl);
-            } catch (error) {
-              throw new PublicError(
-                502,
-                "IMAGE_ERROR",
-                error instanceof Error
-                  ? error.message.slice(0, 200)
-                  : "The generated image could not be saved.",
-              );
+            const inlineBase64 =
+              typeof candidate.imageBase64 === "string" ? candidate.imageBase64.trim() : "";
+            let fetched: { requestedUrl: string; contentType: string; extension: string; bytes: Buffer };
+            if (inlineBase64) {
+              const declaredType = (
+                businessMemoryText(candidate.contentType, "image type", 60) || "image/png"
+              ).toLowerCase();
+              const extensions: Readonly<Record<string, string>> = {
+                "image/png": "png",
+                "image/jpeg": "jpg",
+                "image/webp": "webp",
+              };
+              const extension = extensions[declaredType];
+              if (extension === undefined) {
+                throw new PublicError(
+                  400,
+                  "IMAGE_ERROR",
+                  "Only PNG, JPEG and WebP images can be saved.",
+                );
+              }
+              if (inlineBase64.length > 24 * 1_024 * 1_024) {
+                throw new PublicError(413, "IMAGE_ERROR", "That image is too large to save.");
+              }
+              const bytes = Buffer.from(inlineBase64, "base64");
+              if (bytes.length === 0) {
+                throw new PublicError(400, "IMAGE_ERROR", "The image data was empty.");
+              }
+              fetched = {
+                requestedUrl: sourceUrl || "inline",
+                contentType: declaredType,
+                extension,
+                bytes,
+              };
+            } else {
+              try {
+                fetched = await fetchPublicImage(sourceUrl);
+              } catch (error) {
+                throw new PublicError(
+                  502,
+                  "IMAGE_ERROR",
+                  error instanceof Error
+                    ? error.message.slice(0, 200)
+                    : "The generated image could not be saved.",
+                );
+              }
             }
             const saved = chatStore.saveGeneratedImage({
               sessionId,
@@ -2107,8 +2144,8 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
               ...(businessMemoryText(candidate.revisedPrompt, "revised prompt", 2_000)
                 ? { revisedPrompt: businessMemoryText(candidate.revisedPrompt, "revised prompt", 2_000) }
                 : {}),
-              provider: businessMemoryText(candidate.provider, "provider", 60) || "higgsfield",
-              model: businessMemoryText(candidate.model, "model", 120) || "soul/standard",
+              provider: businessMemoryText(candidate.provider, "provider", 60) || "gemini",
+              model: businessMemoryText(candidate.model, "model", 120) || "gemini-2.5-flash-image",
               aspectRatio: businessMemoryText(candidate.aspectRatio, "aspect ratio", 20) || "1:1",
               contentType: fetched.contentType,
               extension: fetched.extension,
