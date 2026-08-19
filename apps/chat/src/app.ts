@@ -59,6 +59,9 @@ const MAX_BUSINESS_MEMORY_REQUEST_BYTES = 256 * 1_024;
 // it needs more room than saved business memory alone.
 const MAX_PAID_RESEARCH_REQUEST_BYTES = 1_024 * 1_024;
 const MAX_SEO_ARTICLE_REQUEST_BYTES = 1_024 * 1_024;
+// A generated image arrives base64 encoded inside the JSON body, so this
+// endpoint alone needs far more room than an ordinary request.
+const MAX_IMAGE_REQUEST_BYTES = 32 * 1_024 * 1_024;
 const MAX_REQUEST_BYTES = 65_536;
 const MAX_UPSTREAM_BYTES = 65_536;
 const UUID_PATTERN =
@@ -352,6 +355,15 @@ function businessMemoryText(
     );
   }
   return value.trim();
+}
+
+// Optional text on a request body. Absent is fine and returns "";
+// present but not a string is still a client error.
+function optionalText(value: unknown, field: string, maximumLength: number): string {
+  if (value === undefined || value === null || value === "") {
+    return "";
+  }
+  return businessMemoryText(value, field, maximumLength);
 }
 
 function businessMemoryObject(
@@ -2076,7 +2088,7 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
           }
           if (request.method === "POST") {
             const candidate = businessMemoryObject(
-              await readRequestBody(request),
+              await readRequestBody(request, MAX_IMAGE_REQUEST_BYTES),
               "image payload",
             );
             const sessionId = validateSessionId(candidate.sessionId);
@@ -2087,13 +2099,17 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
             // Two shapes arrive here. Providers that hand back a URL are
             // fetched over the DNS-safe reader; providers that inline the
             // bytes as base64 are decoded directly, with no outbound request.
-            const sourceUrl = businessMemoryText(candidate.sourceUrl, "image URL", 2_000);
+            // Check for inline bytes first. A provider that returns the image
+            // itself sends no URL, so requiring one here would reject it.
             const inlineBase64 =
               typeof candidate.imageBase64 === "string" ? candidate.imageBase64.trim() : "";
+            const sourceUrl = inlineBase64
+              ? (typeof candidate.sourceUrl === "string" ? candidate.sourceUrl.trim() : "")
+              : businessMemoryText(candidate.sourceUrl, "image URL", 2_000);
             let fetched: { requestedUrl: string; contentType: string; extension: string; bytes: Buffer };
             if (inlineBase64) {
               const declaredType = (
-                businessMemoryText(candidate.contentType, "image type", 60) || "image/png"
+                optionalText(candidate.contentType, "image type", 60) || "image/png"
               ).toLowerCase();
               const extensions: Readonly<Record<string, string>> = {
                 "image/png": "png",
@@ -2136,17 +2152,17 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
             }
             const saved = chatStore.saveGeneratedImage({
               sessionId,
-              agentId: businessMemoryText(candidate.agentId, "agent", 60) || "seo",
-              ...(businessMemoryText(candidate.jobId, "job ID", 160)
-                ? { jobId: businessMemoryText(candidate.jobId, "job ID", 160) }
+              agentId: optionalText(candidate.agentId, "agent", 60) || "seo",
+              ...(optionalText(candidate.jobId, "job ID", 160)
+                ? { jobId: optionalText(candidate.jobId, "job ID", 160) }
                 : {}),
               prompt,
-              ...(businessMemoryText(candidate.revisedPrompt, "revised prompt", 2_000)
-                ? { revisedPrompt: businessMemoryText(candidate.revisedPrompt, "revised prompt", 2_000) }
+              ...(optionalText(candidate.revisedPrompt, "revised prompt", 2_000)
+                ? { revisedPrompt: optionalText(candidate.revisedPrompt, "revised prompt", 2_000) }
                 : {}),
-              provider: businessMemoryText(candidate.provider, "provider", 60) || "gemini",
-              model: businessMemoryText(candidate.model, "model", 120) || "gemini-2.5-flash-image",
-              aspectRatio: businessMemoryText(candidate.aspectRatio, "aspect ratio", 20) || "1:1",
+              provider: optionalText(candidate.provider, "provider", 60) || "gemini",
+              model: optionalText(candidate.model, "model", 120) || "gemini-2.5-flash-image",
+              aspectRatio: optionalText(candidate.aspectRatio, "aspect ratio", 20) || "1:1",
               contentType: fetched.contentType,
               extension: fetched.extension,
               bytes: fetched.bytes,
