@@ -10,11 +10,17 @@ import {
 } from "node:http";
 import { basename, extname, resolve, sep } from "node:path";
 import Busboy from "busboy";
+import type { AccessGate } from "./access.js";
 import {
   DEFAULT_AGENTS,
   publicAgentDefinitions,
   type AgentDefinition,
 } from "./agents.js";
+import {
+  AgentSettingsStore,
+  AgentSettingsValidationError,
+} from "./agent-settings.js";
+import { buildAgentCardDefinitions } from "./skills.js";
 import {
   DocumentStore,
   DocumentStoreError,
@@ -47,7 +53,7 @@ import {
   ProfileValidationError,
   type AgentProfile,
 } from "./profile.js";
-import { fetchPublicDomainPage, fetchPublicImage, fetchPublicWebPages } from "./public-web.js";
+import { fetchPublicDomainPage, fetchPublicWebPages } from "./public-web.js";
 import { validateSeoArticleResult } from "./seo-article.js";
 
 const MAX_MESSAGE_LENGTH = 8_000;
@@ -55,13 +61,8 @@ const MAX_MESSAGE_LENGTH = 8_000;
 // more room than the 64 KB used by every other request.
 const MAX_PROFILE_REQUEST_BYTES = 512 * 1_024;
 const MAX_BUSINESS_MEMORY_REQUEST_BYTES = 256 * 1_024;
-// A paid snapshot carries rankings, keyword candidates, and SERP evidence, so
-// it needs more room than saved business memory alone.
 const MAX_PAID_RESEARCH_REQUEST_BYTES = 1_024 * 1_024;
 const MAX_SEO_ARTICLE_REQUEST_BYTES = 1_024 * 1_024;
-// A generated image arrives base64 encoded inside the JSON body, so this
-// endpoint alone needs far more room than an ordinary request.
-const MAX_IMAGE_REQUEST_BYTES = 32 * 1_024 * 1_024;
 const MAX_REQUEST_BYTES = 65_536;
 const MAX_UPSTREAM_BYTES = 65_536;
 const UUID_PATTERN =
@@ -96,8 +97,6 @@ type ErrorCode =
   | "DOCUMENT_SERVICE_UNAVAILABLE"
   | "DOCUMENT_TEXT_TOO_LARGE"
   | "FILE_TOO_LARGE"
-  | "IMAGE_ERROR"
-  | "IMAGE_NOT_FOUND"
   | "INVALID_REQUEST"
   | "MESSAGE_TOO_LONG"
   | "RATE_LIMITED"
@@ -152,6 +151,15 @@ export interface ChatGatewayOptions {
   documentStore?: DocumentStore;
   chatStore?: ChatStore;
   profileStore?: ProfileStore;
+  agentSettingsStore?: AgentSettingsStore;
+  skillsDirectory?: string;
+  profileDirectory?: string;
+  /**
+   * Guards every route except /health. Omitted on a learner's own computer,
+   * where the gateway is only reachable from that computer; required before
+   * the gateway is given a public address.
+   */
+  accessGate?: AccessGate | undefined;
 }
 
 class PublicError extends Error {
@@ -355,15 +363,6 @@ function businessMemoryText(
     );
   }
   return value.trim();
-}
-
-// Optional text on a request body. Absent is fine and returns "";
-// present but not a string is still a client error.
-function optionalText(value: unknown, field: string, maximumLength: number): string {
-  if (value === undefined || value === null || value === "") {
-    return "";
-  }
-  return businessMemoryText(value, field, maximumLength);
 }
 
 function businessMemoryObject(
@@ -1318,6 +1317,16 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
         return;
       }
 
+      // Deliberately below /health, so the platform's health check keeps
+      // working while nobody is signed in, and above everything else, so no
+      // route can be added later that forgets to check.
+      if (
+        options.accessGate !== undefined &&
+        (await options.accessGate.handle(request, response, url))
+      ) {
+        return;
+      }
+
       if (url.pathname === "/api/agents") {
         if (request.method !== "GET") {
           sendJson(
@@ -1333,10 +1342,21 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
           );
           return;
         }
-        sendJson(response, 200, {
-          schemaVersion: 1,
-          agents: publicAgentDefinitions(agents),
-        });
+        const publicAgents =
+          options.skillsDirectory !== undefined &&
+          options.profileDirectory !== undefined
+            ? await buildAgentCardDefinitions(
+                agents,
+                options.skillsDirectory,
+                options.profileDirectory,
+                (message) => options.logError?.(message),
+              )
+            : publicAgentDefinitions(agents).map((agent) => ({
+                ...agent,
+                skills: [],
+                syncRequired: true,
+              }));
+        sendJson(response, 200, { schemaVersion: 2, agents: publicAgents });
         return;
       }
 
@@ -1409,6 +1429,82 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
                 "Your agent details could not be saved.",
               ),
             );
+          }
+        }
+        return;
+      }
+
+      if (url.pathname === "/api/agent-settings") {
+        if (options.agentSettingsStore === undefined) {
+          sendJson(response, 503, {
+            error: {
+              code: "AGENT_UNAVAILABLE",
+              message: "Agent settings are not available.",
+            },
+          });
+          return;
+        }
+        try {
+          if (request.method === "GET") {
+            const saved = await options.agentSettingsStore.readAll();
+            sendJson(response, 200, { schemaVersion: 1, ...saved });
+            return;
+          }
+          if (request.method === "PUT") {
+            const body = await readRequestBody(request, MAX_REQUEST_BYTES);
+            if (
+              typeof body !== "object" ||
+              body === null ||
+              Array.isArray(body)
+            ) {
+              throw new AgentSettingsValidationError(
+                "Agent settings must be an object.",
+              );
+            }
+            const candidate = body as Record<string, unknown>;
+            if (typeof candidate.agentId !== "string") {
+              throw new AgentSettingsValidationError(
+                "Choose an agent before saving settings.",
+              );
+            }
+            const saved = await options.agentSettingsStore.write(
+              candidate.agentId,
+              candidate.values,
+            );
+            sendJson(response, 200, {
+              schemaVersion: 1,
+              ...saved,
+              syncRequired: true,
+            });
+            return;
+          }
+          sendJson(
+            response,
+            405,
+            {
+              error: {
+                code: "INVALID_REQUEST",
+                message: "That method is not supported.",
+              },
+            },
+            { Allow: "GET, PUT" },
+          );
+        } catch (error) {
+          if (error instanceof AgentSettingsValidationError) {
+            sendJson(response, 400, {
+              error: {
+                code: "INVALID_REQUEST",
+                message: error.message,
+              },
+            });
+          } else {
+            options.logError?.("Could not manage agent settings", error);
+            sendJson(response, 500, {
+              error: {
+                code: "AGENT_UNAVAILABLE",
+                message: "Agent settings could not be saved.",
+              },
+            });
           }
         }
         return;
@@ -2040,151 +2136,6 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
                 "BUSINESS_MEMORY_ERROR",
                 "Paid domain research is not available right now.",
               ),
-            );
-          }
-        }
-        return;
-      }
-
-      const generatedImageDownload = url.pathname.match(
-        /^\/api\/generated-images\/([A-Za-z0-9_-]{24,64})\.(png|jpg|webp)$/,
-      );
-      if (generatedImageDownload) {
-        try {
-          const stored = chatStore.getGeneratedImageBytes(generatedImageDownload[1] ?? "");
-          if (stored === undefined) {
-            sendError(
-              response,
-              new PublicError(404, "IMAGE_NOT_FOUND", "That image is not available."),
-            );
-            return;
-          }
-          response.writeHead(200, {
-            ...SECURITY_HEADERS,
-            "Cache-Control": "private, max-age=86400",
-            "Content-Length": stored.bytes.length.toString(),
-            "Content-Type": stored.contentType,
-          });
-          response.end(stored.bytes);
-        } catch (error) {
-          options.logError?.("Could not read the generated image", error);
-          sendError(
-            response,
-            new PublicError(500, "IMAGE_ERROR", "That image could not be read."),
-          );
-        }
-        return;
-      }
-
-      if (url.pathname === "/api/generated-images") {
-        try {
-          if (request.method === "GET") {
-            const sessionId = validateSessionId(url.searchParams.get("sessionId"));
-            sendJson(response, 200, {
-              schemaVersion: 1,
-              images: chatStore.listGeneratedImages(sessionId, 20),
-            });
-            return;
-          }
-          if (request.method === "POST") {
-            const candidate = businessMemoryObject(
-              await readRequestBody(request, MAX_IMAGE_REQUEST_BYTES),
-              "image payload",
-            );
-            const sessionId = validateSessionId(candidate.sessionId);
-            const prompt = businessMemoryText(candidate.prompt, "image prompt", 2_000);
-            if (!prompt) {
-              throw new PublicError(400, "INVALID_REQUEST", "The image needs a prompt.");
-            }
-            // Two shapes arrive here. Providers that hand back a URL are
-            // fetched over the DNS-safe reader; providers that inline the
-            // bytes as base64 are decoded directly, with no outbound request.
-            // Check for inline bytes first. A provider that returns the image
-            // itself sends no URL, so requiring one here would reject it.
-            const inlineBase64 =
-              typeof candidate.imageBase64 === "string" ? candidate.imageBase64.trim() : "";
-            const sourceUrl = inlineBase64
-              ? (typeof candidate.sourceUrl === "string" ? candidate.sourceUrl.trim() : "")
-              : businessMemoryText(candidate.sourceUrl, "image URL", 2_000);
-            let fetched: { requestedUrl: string; contentType: string; extension: string; bytes: Buffer };
-            if (inlineBase64) {
-              const declaredType = (
-                optionalText(candidate.contentType, "image type", 60) || "image/png"
-              ).toLowerCase();
-              const extensions: Readonly<Record<string, string>> = {
-                "image/png": "png",
-                "image/jpeg": "jpg",
-                "image/webp": "webp",
-              };
-              const extension = extensions[declaredType];
-              if (extension === undefined) {
-                throw new PublicError(
-                  400,
-                  "IMAGE_ERROR",
-                  "Only PNG, JPEG and WebP images can be saved.",
-                );
-              }
-              if (inlineBase64.length > 24 * 1_024 * 1_024) {
-                throw new PublicError(413, "IMAGE_ERROR", "That image is too large to save.");
-              }
-              const bytes = Buffer.from(inlineBase64, "base64");
-              if (bytes.length === 0) {
-                throw new PublicError(400, "IMAGE_ERROR", "The image data was empty.");
-              }
-              fetched = {
-                requestedUrl: sourceUrl || "inline",
-                contentType: declaredType,
-                extension,
-                bytes,
-              };
-            } else {
-              try {
-                fetched = await fetchPublicImage(sourceUrl);
-              } catch (error) {
-                throw new PublicError(
-                  502,
-                  "IMAGE_ERROR",
-                  error instanceof Error
-                    ? error.message.slice(0, 200)
-                    : "The generated image could not be saved.",
-                );
-              }
-            }
-            const saved = chatStore.saveGeneratedImage({
-              sessionId,
-              agentId: optionalText(candidate.agentId, "agent", 60) || "seo",
-              ...(optionalText(candidate.jobId, "job ID", 160)
-                ? { jobId: optionalText(candidate.jobId, "job ID", 160) }
-                : {}),
-              prompt,
-              ...(optionalText(candidate.revisedPrompt, "revised prompt", 2_000)
-                ? { revisedPrompt: optionalText(candidate.revisedPrompt, "revised prompt", 2_000) }
-                : {}),
-              provider: optionalText(candidate.provider, "provider", 60) || "gemini",
-              model: optionalText(candidate.model, "model", 120) || "gemini-2.5-flash-image",
-              aspectRatio: optionalText(candidate.aspectRatio, "aspect ratio", 20) || "1:1",
-              contentType: fetched.contentType,
-              extension: fetched.extension,
-              bytes: fetched.bytes,
-              sourceUrl: fetched.requestedUrl,
-            });
-            const { downloadToken: _token, ...publicRecord } = saved;
-            sendJson(response, 200, { schemaVersion: 1, image: publicRecord });
-            return;
-          }
-          sendJson(
-            response,
-            405,
-            { error: { code: "INVALID_REQUEST", message: "That method is not supported." } },
-            { Allow: "GET, POST" },
-          );
-        } catch (error) {
-          if (error instanceof PublicError) sendError(response, error);
-          else {
-            options.logError?.("Could not save the generated image", error);
-            sendError(
-              response,
-              new PublicError(500, "IMAGE_ERROR", "The image could not be saved."),
             );
           }
         }

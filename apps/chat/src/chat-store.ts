@@ -10,7 +10,7 @@ import type {
   ArticleOpportunity,
 } from "./article-brief.js";
 
-const SCHEMA_VERSION = 6;
+const SCHEMA_VERSION = 5;
 const DEFAULT_TITLE = "New conversation";
 const MAX_TITLE_LENGTH = 80;
 const MAX_SEARCH_LENGTH = 200;
@@ -242,40 +242,6 @@ export interface BusinessMemorySummary {
   warningCount: number;
   researchedAt: string;
   updatedAt: string;
-}
-
-export interface GeneratedImageInput {
-  sessionId: string;
-  agentId: string;
-  jobId?: string;
-  prompt: string;
-  revisedPrompt?: string;
-  provider: string;
-  model: string;
-  aspectRatio: string;
-  contentType: string;
-  extension: string;
-  bytes: Buffer;
-  sourceUrl: string;
-}
-
-export interface GeneratedImageRecord {
-  imageId: string;
-  sessionId: string;
-  agentId: string;
-  jobId?: string;
-  prompt: string;
-  revisedPrompt?: string;
-  provider: string;
-  model: string;
-  aspectRatio: string;
-  contentType: string;
-  extension: string;
-  byteLength: number;
-  sourceUrl: string;
-  downloadToken: string;
-  downloadUrl: string;
-  createdAt: string;
 }
 
 export interface BeginTurnInput {
@@ -769,9 +735,6 @@ export class ChatStore {
       });
     }
     if (version < 3) {
-      // Additive step for paid domain research. Existing conversations, saved
-      // business memory, and research jobs are rebuilt in place rather than
-      // dropped, and the guard above makes the whole step repeatable.
       this.transaction(() => {
         this.database.exec(`
           DROP INDEX domain_research_jobs_session;
@@ -924,45 +887,9 @@ export class ChatStore {
         `);
       });
     }
-    if (version < 6) {
-      // Additive step for generated images. Nothing existing is touched, and the
-      // version guard above makes the whole step repeatable.
-      this.transaction(() => {
-        this.database.exec(`
-          CREATE TABLE generated_images (
-            image_id TEXT PRIMARY KEY,
-            session_id TEXT NOT NULL,
-            agent_id TEXT NOT NULL,
-            job_id TEXT,
-            prompt TEXT NOT NULL,
-            revised_prompt TEXT,
-            provider TEXT NOT NULL,
-            model TEXT NOT NULL,
-            aspect_ratio TEXT NOT NULL,
-            content_type TEXT NOT NULL,
-            extension TEXT NOT NULL,
-            byte_length INTEGER NOT NULL CHECK (byte_length > 0),
-            bytes BLOB NOT NULL,
-            source_url TEXT NOT NULL,
-            download_token TEXT NOT NULL UNIQUE,
-            created_at TEXT NOT NULL
-          ) STRICT;
-
-          CREATE INDEX generated_images_session_created
-          ON generated_images(session_id, created_at DESC);
-
-          CREATE INDEX generated_images_job
-          ON generated_images(job_id);
-
-          PRAGMA user_version = 6;
-        `);
-      });
-    }
-
     this.database.prepare("SELECT rowid FROM message_search LIMIT 1").all();
     this.database.prepare("SELECT domain FROM business_memory LIMIT 1").all();
     this.database.prepare("SELECT job_id FROM domain_research_jobs LIMIT 1").all();
-    this.database.prepare("SELECT image_id FROM generated_images LIMIT 1").all();
     this.database.prepare("SELECT snapshot_id FROM seo_snapshots LIMIT 1").all();
     this.database.prepare("SELECT job_id FROM seo_article_jobs LIMIT 1").all();
     this.database.prepare("SELECT version_id FROM seo_article_versions LIMIT 1").all();
@@ -1563,8 +1490,6 @@ export class ChatStore {
           throw new Error("Successful paid research requires matching business memory");
         }
       } else if (memory !== undefined) {
-        // A failed attempt is still recorded, but it must never overwrite the
-        // last successful company memory for this domain.
         throw new Error("Failed paid research cannot replace business memory");
       }
 
@@ -1703,107 +1628,6 @@ export class ChatStore {
       updatedAt: row.updated_at,
       warningCount: (JSON.parse(row.warnings_json) as unknown[]).length,
     }));
-  }
-
-  saveGeneratedImage(input: GeneratedImageInput): GeneratedImageRecord {
-    return this.transaction(() => {
-      const imageId = randomUUID();
-      const downloadToken = randomBytes(24).toString("base64url");
-      const createdAt = nowIso();
-      this.database
-        .prepare(
-          `INSERT INTO generated_images(
-             image_id, session_id, agent_id, job_id, prompt, revised_prompt,
-             provider, model, aspect_ratio, content_type, extension,
-             byte_length, bytes, source_url, download_token, created_at
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        )
-        .run(
-          imageId,
-          input.sessionId,
-          input.agentId,
-          input.jobId ?? null,
-          input.prompt,
-          input.revisedPrompt ?? null,
-          input.provider,
-          input.model,
-          input.aspectRatio,
-          input.contentType,
-          input.extension,
-          input.bytes.length,
-          input.bytes,
-          input.sourceUrl,
-          downloadToken,
-          createdAt,
-        );
-      const saved = this.getGeneratedImage(input.sessionId, imageId);
-      if (saved === undefined) {
-        throw new Error("Stored image could not be read back");
-      }
-      return saved;
-    });
-  }
-
-  private generatedImageFromRow(row: Record<string, unknown>): GeneratedImageRecord {
-    const token = String(row.download_token);
-    const record: GeneratedImageRecord = {
-      imageId: String(row.image_id),
-      sessionId: String(row.session_id),
-      agentId: String(row.agent_id),
-      prompt: String(row.prompt),
-      provider: String(row.provider),
-      model: String(row.model),
-      aspectRatio: String(row.aspect_ratio),
-      contentType: String(row.content_type),
-      extension: String(row.extension),
-      byteLength: Number(row.byte_length),
-      sourceUrl: String(row.source_url),
-      downloadToken: token,
-      downloadUrl: `/api/generated-images/${token}.${String(row.extension)}`,
-      createdAt: String(row.created_at),
-    };
-    if (row.job_id !== null && row.job_id !== undefined) record.jobId = String(row.job_id);
-    if (row.revised_prompt !== null && row.revised_prompt !== undefined) {
-      record.revisedPrompt = String(row.revised_prompt);
-    }
-    return record;
-  }
-
-  getGeneratedImage(sessionId: string, imageId: string): GeneratedImageRecord | undefined {
-    const row = this.database
-      .prepare(
-        `SELECT image_id, session_id, agent_id, job_id, prompt, revised_prompt,
-                provider, model, aspect_ratio, content_type, extension,
-                byte_length, source_url, download_token, created_at
-         FROM generated_images WHERE image_id = ? AND session_id = ?`,
-      )
-      .get(imageId, sessionId) as Record<string, unknown> | undefined;
-    return row === undefined ? undefined : this.generatedImageFromRow(row);
-  }
-
-  listGeneratedImages(sessionId: string, limit = 20): GeneratedImageRecord[] {
-    const bounded = Math.max(1, Math.min(limit, 100));
-    const rows = this.database
-      .prepare(
-        `SELECT image_id, session_id, agent_id, job_id, prompt, revised_prompt,
-                provider, model, aspect_ratio, content_type, extension,
-                byte_length, source_url, download_token, created_at
-         FROM generated_images WHERE session_id = ?
-         ORDER BY created_at DESC LIMIT ?`,
-      )
-      .all(sessionId, bounded) as Array<Record<string, unknown>>;
-    return rows.map((row) => this.generatedImageFromRow(row));
-  }
-
-  getGeneratedImageBytes(
-    token: string,
-  ): { bytes: Buffer; contentType: string } | undefined {
-    const row = this.database
-      .prepare("SELECT bytes, content_type FROM generated_images WHERE download_token = ?")
-      .get(token) as { bytes: Uint8Array; content_type: string } | undefined;
-    return row === undefined
-      ? undefined
-      : { bytes: Buffer.from(row.bytes), contentType: row.content_type };
   }
 
   getBusinessMemory(domain: string): BusinessMemoryRecord | undefined {
