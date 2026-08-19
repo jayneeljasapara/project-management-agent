@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { chmodSync, mkdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type {
@@ -590,6 +590,46 @@ function decodeCursor(value: string): { updatedAt: string; id: string } {
   throw new Error("Invalid conversation cursor");
 }
 
+/**
+ * If the on-disk conversations database was written by a newer schema than this
+ * build understands, it cannot be read safely. Rather than crash-loop forever,
+ * rename it aside (keeping it as a recoverable backup next to the original) so a
+ * fresh, empty database can be created. This happens when a pack produced by a
+ * newer local build is restored onto an older cloud build.
+ */
+function quarantineTooNewDatabase(databasePath: string): void {
+  if (databasePath === ":memory:" || !existsSync(databasePath)) {
+    return;
+  }
+  let version = 0;
+  try {
+    const probe = new DatabaseSync(databasePath);
+    const row = probe.prepare("PRAGMA user_version").get() as
+      | { user_version?: number }
+      | undefined;
+    version = Number(row?.user_version ?? 0);
+    probe.close();
+  } catch {
+    // If the file cannot even be opened, leave it for the normal path to report.
+    return;
+  }
+  if (version <= SCHEMA_VERSION) {
+    return;
+  }
+  const backupPath = `${databasePath}.schema-${version}.bak`;
+  renameSync(databasePath, backupPath);
+  for (const suffix of ["-wal", "-shm"]) {
+    const sidecar = `${databasePath}${suffix}`;
+    if (existsSync(sidecar)) {
+      renameSync(sidecar, `${backupPath}${suffix}`);
+    }
+  }
+  console.warn(
+    `[chat] Conversations database was schema ${version}, newer than supported ` +
+      `${SCHEMA_VERSION}. Set it aside as ${backupPath} and started a fresh database.`,
+  );
+}
+
 export class ChatStore {
   private readonly database: DatabaseSync;
   private closed = false;
@@ -601,6 +641,7 @@ export class ChatStore {
       if (process.platform !== "win32") {
         chmodSync(dirname(databasePath), 0o700);
       }
+      quarantineTooNewDatabase(databasePath);
     }
     this.database = new DatabaseSync(databasePath);
     if (!inMemory && process.platform !== "win32") {
