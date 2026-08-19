@@ -212,7 +212,7 @@
       "parameters": {
         "mode": "runOnceForEachItem",
         "language": "javaScript",
-        "jsCode": "const input=$('Validate Image Request').first().json;\nconst saved=$json.image;\nconst ok=Boolean(saved&&saved.downloadUrl);\nconst response=ok\n  ?{ok:true,savedImage:true,prompt:input.prompt,aspectRatio:input.aspectRatio,\n     downloadUrl:saved.downloadUrl,imageId:saved.imageId,\n     message:'The picture is saved and shown in the chat. Nothing was published anywhere.'}\n  :{ok:false,savedImage:false,error:{code:'IMAGE_NOT_SAVED',message:'The picture was made but could not be saved locally.'}};\nreturn {json:{response}};"
+        "jsCode": "const input=$('Validate Image Request').first().json;\nconst saved=$json.image;\nconst ok=Boolean(saved&&saved.downloadUrl);\n// The chat page only renders a picture when the reply text carries its link,\n// so the link is handed back as a ready-made line to repeat verbatim.\nconst response=ok\n  ?{ok:true,savedImage:true,prompt:input.prompt,aspectRatio:input.aspectRatio,\n     downloadUrl:saved.downloadUrl,imageId:saved.imageId,\n     replyLine:'![picture]('+saved.downloadUrl+')',\n     mustInclude:'Copy the replyLine value into your reply exactly as written, on its own line, before any commentary. The picture cannot be shown to the user unless that line appears in your reply.',\n     message:'The picture is saved. Include the replyLine in your reply so it appears in the chat. Nothing was published anywhere.'}\n  :{ok:false,savedImage:false,error:{code:'IMAGE_NOT_SAVED',message:'The picture was made but could not be saved locally.'}};\nreturn {json:{response}};"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,

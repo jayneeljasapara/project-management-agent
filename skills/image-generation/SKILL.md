@@ -36,6 +36,14 @@ House style for pictures:
 
 Use `16:9` for a blog header, `1:1` for social, `9:16` for a story or reel. Default to `16:9`.
 
+## Always show the picture
+
+The tool returns a `replyLine` such as `![picture](/api/generated-images/abc123.png)`.
+
+Copy that line into your reply exactly as written, on its own line, before anything else you say. The chat only renders a picture when that link appears in the reply text. Describing the picture without the line means the user sees nothing.
+
+Never type the link from memory, never shorten it, and never invent one. Use the exact value the tool returned.
+
 ## Report it honestly
 
 The tool returns a saved picture and a link the chat shows inline.
