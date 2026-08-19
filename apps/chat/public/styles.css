@@ -1572,3 +1572,82 @@ textarea:focus-visible,
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Pictures: the composer button, and images saved into a conversation.
+   --------------------------------------------------------------------------- */
+
+.image-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.6rem 0.3rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.image-button svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.image-button:hover,
+.image-button:focus-visible {
+  border-color: var(--brand-accent);
+  background: color-mix(in srgb, var(--brand-accent) 12%, var(--surface));
+  color: var(--brand-primary);
+}
+
+.image-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.message__image {
+  display: block;
+  margin: 0.65rem 0 0.2rem;
+}
+
+.message__image img {
+  display: block;
+  width: 100%;
+  max-width: 30rem;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--panel);
+  box-shadow: 0 0.4rem 1.2rem rgb(25 42 72 / 10%);
+}
+
+.message__image-save {
+  display: inline-block;
+  margin-top: 0.4rem;
+  color: var(--brand-primary);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.16em;
+}
+
+.message__image-save:hover {
+  text-decoration-thickness: 0.14em;
+}
+
+@media (max-width: 50rem) {
+  .image-button span {
+    display: none;
+  }
+
+  .image-button {
+    padding: 0.35rem;
+  }
+}

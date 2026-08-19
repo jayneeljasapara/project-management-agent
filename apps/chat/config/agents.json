@@ -3,8 +3,8 @@
   "agents": [
     {
       "id": "project-manager",
-      "name": "Project Manager",
-      "description": "Plans projects, analyses meetings, and turns decisions into safe next actions.",
+      "name": "Skipper",
+      "description": "The captain. Runs the plan, sets priorities, and turns meetings into next actions.",
       "status": "active",
       "workflowPath": "/webhook/chat",
       "examplePrompts": [
@@ -14,28 +14,40 @@
       ]
     },
     {
+      "id": "seo",
+      "name": "Scout",
+      "description": "The talent scout. Researches your market, finds keyword opportunities, writes articles and makes the images for them.",
+      "status": "active",
+      "workflowPath": "/webhook/chat",
+      "examplePrompts": [
+        "Research sportsinsightmedia.com.au and show me article ideas",
+        "Write me an SEO article from the strongest idea",
+        "Generate a header image for that article"
+      ]
+    },
+    {
       "id": "sales",
-      "name": "Sales",
-      "description": "Researches prospects, drafts replies, and turns calls into proposals.",
+      "name": "Closer",
+      "description": "The finisher. Handles enquiries, writes outreach, and turns calls into proposals.",
       "status": "active",
       "workflowPath": "/webhook/chat",
       "examplePrompts": [
         "Draft a reply to this enquiry that just came in",
         "Turn these call notes into a recap and a proposal",
-        "Write a cold email to this person"
+        "What do we already know about this company?"
       ]
     },
     {
       "id": "marketing",
-      "name": "Marketing",
-      "description": "Campaign planning, content, and marketing operations.",
+      "name": "Coach",
+      "description": "Campaign planning, positioning, and marketing operations.",
       "status": "coming-soon",
       "workflowPath": "",
       "examplePrompts": []
     },
     {
       "id": "investment",
-      "name": "Investment",
+      "name": "Selector",
       "description": "Investment research, analysis, and decision preparation.",
       "status": "coming-soon",
       "workflowPath": "",
@@ -43,8 +55,8 @@
     },
     {
       "id": "bookkeeping",
-      "name": "Bookkeeping",
-      "description": "Bookkeeping preparation, review, and reconciliation support.",
+      "name": "Keeper",
+      "description": "Guards the books. Bookkeeping preparation, review, and reconciliation.",
       "status": "coming-soon",
       "workflowPath": "",
       "examplePrompts": []

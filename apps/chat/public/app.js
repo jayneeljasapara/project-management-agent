@@ -80,6 +80,7 @@
     historySearchForm: document.querySelector("#history-search-form"),
     historySearchInput: document.querySelector("#history-search-input"),
     historyStatus: document.querySelector("#history-status"),
+    imageButton: document.querySelector("#image-button"),
     input: document.querySelector("#message-input"),
     mobileAgentInitials: document.querySelector("#mobile-agent-initials"),
     pasteButton: document.querySelector("#paste-button"),
@@ -169,26 +170,29 @@
     );
   }
 
+  // Every teammate carries its own name from the server registry, so the
+  // header always shows the persona the user picked rather than the app name.
   function displayAgentName() {
-    return activeAgentId === "project-manager"
-      ? config.name
-      : activeAgent()?.name ?? config.name;
+    return activeAgent()?.name ?? config.name;
   }
 
   // Only the Project Manager greeting is learner-editable in agent.config.js.
   // Every other active agent introduces itself from the server registry, so a
   // second agent never claims to be the Project Manager.
   function displayWelcomeMessage() {
-    if (activeAgentId === "project-manager") {
-      return config.welcomeMessage;
-    }
     const agent = activeAgent();
     if (!agent) {
       return config.welcomeMessage;
     }
     // The registry description is third person and already renders as the
     // panel subtitle, so repeating it here would read oddly and twice.
-    return `Hello! I’m your ${agent.name} agent. Tell me what you need and I’ll help.`;
+    const greetings = {
+      "project-manager":
+        `${agent.name} here. Give me the notes or tell me what is on, and I will call the plan and the next actions.`,
+      seo: `${agent.name} here. Point me at a website and I will find the search openings, write the article, and make the picture for it.`,
+      sales: `${agent.name} here. Paste the enquiry or the call notes and I will draft the reply.`,
+    };
+    return greetings[agent.id] ?? `${agent.name} here. Tell me what you need.`;
   }
 
   function getInitials(name) {
@@ -342,17 +346,34 @@
   }
 
   function appendSafeMessageText(element, text) {
-    const localDownload = /\/api\/seo-article\/download\/[A-Za-z0-9_-]{40,60}\.md/g;
+    const localDownload =
+      /\/api\/(?:seo-article\/download\/[A-Za-z0-9_-]{40,60}\.md|generated-images\/[A-Za-z0-9_-]{24,64}\.(?:png|jpg|webp))/g;
     let offset = 0;
     for (const match of text.matchAll(localDownload)) {
       const index = match.index ?? 0;
       element.append(document.createTextNode(text.slice(offset, index)));
-      const link = document.createElement("a");
-      link.className = "message__download";
-      link.href = match[0];
-      link.download = "";
-      link.textContent = "Download the article (.md)";
-      element.append(link);
+      if (/\/api\/generated-images\//.test(match[0])) {
+        const figure = document.createElement("span");
+        figure.className = "message__image";
+        const picture = document.createElement("img");
+        picture.src = match[0];
+        picture.alt = "Picture generated for this conversation";
+        picture.loading = "lazy";
+        const save = document.createElement("a");
+        save.className = "message__image-save";
+        save.href = match[0];
+        save.download = "";
+        save.textContent = "Save the picture";
+        figure.append(picture, save);
+        element.append(figure);
+      } else {
+        const link = document.createElement("a");
+        link.className = "message__download";
+        link.href = match[0];
+        link.download = "";
+        link.textContent = "Download the article (.md)";
+        element.append(link);
+      }
       offset = index + match[0].length;
     }
     element.append(document.createTextNode(text.slice(offset)));
@@ -1284,6 +1305,16 @@
       event.preventDefault();
       elements.form.requestSubmit();
     }
+  });
+
+  elements.imageButton.addEventListener("click", () => {
+    const scaffold = "Make me a picture of ";
+    const current = elements.input.value.trim();
+    elements.input.value = current.length > 0 ? current : scaffold;
+    elements.input.focus();
+    const end = elements.input.value.length;
+    elements.input.setSelectionRange(end, end);
+    elements.input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 
   elements.attachmentMenuButton.addEventListener("click", () => {

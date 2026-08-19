@@ -47,7 +47,7 @@ import {
   ProfileValidationError,
   type AgentProfile,
 } from "./profile.js";
-import { fetchPublicDomainPage, fetchPublicWebPages } from "./public-web.js";
+import { fetchPublicDomainPage, fetchPublicImage, fetchPublicWebPages } from "./public-web.js";
 import { validateSeoArticleResult } from "./seo-article.js";
 
 const MAX_MESSAGE_LENGTH = 8_000;
@@ -93,6 +93,8 @@ type ErrorCode =
   | "DOCUMENT_SERVICE_UNAVAILABLE"
   | "DOCUMENT_TEXT_TOO_LARGE"
   | "FILE_TOO_LARGE"
+  | "IMAGE_ERROR"
+  | "IMAGE_NOT_FOUND"
   | "INVALID_REQUEST"
   | "MESSAGE_TOO_LONG"
   | "RATE_LIMITED"
@@ -2026,6 +2028,110 @@ export function createChatHandler(options: ChatGatewayOptions): RequestListener 
                 "BUSINESS_MEMORY_ERROR",
                 "Paid domain research is not available right now.",
               ),
+            );
+          }
+        }
+        return;
+      }
+
+      const generatedImageDownload = url.pathname.match(
+        /^\/api\/generated-images\/([A-Za-z0-9_-]{24,64})\.(png|jpg|webp)$/,
+      );
+      if (generatedImageDownload) {
+        try {
+          const stored = chatStore.getGeneratedImageBytes(generatedImageDownload[1] ?? "");
+          if (stored === undefined) {
+            sendError(
+              response,
+              new PublicError(404, "IMAGE_NOT_FOUND", "That image is not available."),
+            );
+            return;
+          }
+          response.writeHead(200, {
+            ...SECURITY_HEADERS,
+            "Cache-Control": "private, max-age=86400",
+            "Content-Length": stored.bytes.length.toString(),
+            "Content-Type": stored.contentType,
+          });
+          response.end(stored.bytes);
+        } catch (error) {
+          options.logError?.("Could not read the generated image", error);
+          sendError(
+            response,
+            new PublicError(500, "IMAGE_ERROR", "That image could not be read."),
+          );
+        }
+        return;
+      }
+
+      if (url.pathname === "/api/generated-images") {
+        try {
+          if (request.method === "GET") {
+            const sessionId = validateSessionId(url.searchParams.get("sessionId"));
+            sendJson(response, 200, {
+              schemaVersion: 1,
+              images: chatStore.listGeneratedImages(sessionId, 20),
+            });
+            return;
+          }
+          if (request.method === "POST") {
+            const candidate = businessMemoryObject(
+              await readRequestBody(request),
+              "image payload",
+            );
+            const sessionId = validateSessionId(candidate.sessionId);
+            const prompt = businessMemoryText(candidate.prompt, "image prompt", 2_000);
+            if (!prompt) {
+              throw new PublicError(400, "INVALID_REQUEST", "The image needs a prompt.");
+            }
+            const sourceUrl = businessMemoryText(candidate.sourceUrl, "image URL", 2_000);
+            let fetched;
+            try {
+              fetched = await fetchPublicImage(sourceUrl);
+            } catch (error) {
+              throw new PublicError(
+                502,
+                "IMAGE_ERROR",
+                error instanceof Error
+                  ? error.message.slice(0, 200)
+                  : "The generated image could not be saved.",
+              );
+            }
+            const saved = chatStore.saveGeneratedImage({
+              sessionId,
+              agentId: businessMemoryText(candidate.agentId, "agent", 60) || "seo",
+              ...(businessMemoryText(candidate.jobId, "job ID", 160)
+                ? { jobId: businessMemoryText(candidate.jobId, "job ID", 160) }
+                : {}),
+              prompt,
+              ...(businessMemoryText(candidate.revisedPrompt, "revised prompt", 2_000)
+                ? { revisedPrompt: businessMemoryText(candidate.revisedPrompt, "revised prompt", 2_000) }
+                : {}),
+              provider: businessMemoryText(candidate.provider, "provider", 60) || "higgsfield",
+              model: businessMemoryText(candidate.model, "model", 120) || "soul/standard",
+              aspectRatio: businessMemoryText(candidate.aspectRatio, "aspect ratio", 20) || "1:1",
+              contentType: fetched.contentType,
+              extension: fetched.extension,
+              bytes: fetched.bytes,
+              sourceUrl: fetched.requestedUrl,
+            });
+            const { downloadToken: _token, ...publicRecord } = saved;
+            sendJson(response, 200, { schemaVersion: 1, image: publicRecord });
+            return;
+          }
+          sendJson(
+            response,
+            405,
+            { error: { code: "INVALID_REQUEST", message: "That method is not supported." } },
+            { Allow: "GET, POST" },
+          );
+        } catch (error) {
+          if (error instanceof PublicError) sendError(response, error);
+          else {
+            options.logError?.("Could not save the generated image", error);
+            sendError(
+              response,
+              new PublicError(500, "IMAGE_ERROR", "The image could not be saved."),
             );
           }
         }

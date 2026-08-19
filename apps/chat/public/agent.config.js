@@ -4,17 +4,19 @@
  * Change only the words and colour between the quotes below, save the file,
  * then refresh http://localhost:3000 in your browser.
  *
- * Keep each example prompt on its own line and leave the commas in place.
+ * This is the fallback shown before a teammate is picked. Each teammate
+ * (Skipper, Scout, Closer) carries its own name and voice from
+ * apps/chat/config/agents.json.
  */
 window.AGENT_CONFIG = Object.freeze({
-  name: "Project Manager",
-  subtitle: "Turns meetings, documents and ideas into clear next steps.",
+  name: "Sports Insight Media",
+  subtitle: "Your squad: Skipper runs the plan, Scout finds the search openings, Closer handles the enquiries.",
   welcomeMessage:
-    "Hi Jayneel. Tell me what you are working on, or drop in a meeting transcript. I will give you the short version and the next steps.",
+    "Hi Jayneel. Pick a teammate on the left. Skipper for the plan and the tasks. Scout for research, articles and their images. Closer for enquiries and proposals.",
   primaryColour: "#192a48",
   examplePrompts: [
     "Turn these meeting notes into decisions and action items",
-    "Build a practical project plan from this document",
-    "Show me the highest-priority work in my local project",
+    "Research sportsinsightmedia.com.au and show me article ideas",
+    "Draft a reply to this enquiry that just came in",
   ],
 });

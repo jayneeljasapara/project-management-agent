@@ -25,6 +25,7 @@ const expectedFiles = [
   "56-tool-start-seo-article.json",
   "57-internal-write-seo-article.json",
   "58-tool-get-seo-article.json",
+  "59-tool-generate-image.json",
   "90-debug-agent-health.json",
 ];
 const failures = [];
@@ -159,7 +160,7 @@ if (agentWorkflow) {
   );
   check(
     agentWorkflow.nodes.filter((node) => node.type !== "n8n-nodes-base.stickyNote")
-      .length <= 24,
+      .length <= 26,
     "Agent workflow must keep confirmation routing and tool wiring explainable",
   );
   check(
@@ -322,6 +323,7 @@ if (agentWorkflow) {
         "get_paid_domain_research",
         "start_seo_article",
         "get_seo_article",
+        "generate_image",
       ]),
     "Agent: only the reviewed task, domain-research and article tools may be connected",
   );
@@ -1533,6 +1535,7 @@ const OPTIONAL_SKILL_IDS = [
   "domain-research",
   "paid-domain-research",
   "seo-article-writer",
+  "image-generation",
   "linkedin-profile-lookup",
   "linkedin-prospect-search",
   "house-style",
@@ -1594,6 +1597,11 @@ check(
           "internal_background_only",
         ],
         ["get_seo_article", "read", "automatic"],
+        [
+          "generate_image",
+          "paid_external_write_free_local_save",
+          "explicit_request_required",
+        ],
       ]),
   "Tool policy must classify the reviewed task, domain-research and article tools",
 );
