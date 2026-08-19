@@ -10,6 +10,7 @@ const defaultProfileDirectory = join(projectRoot, "data", "profile");
 
 export const AGENT_IDS = Object.freeze([
   "project-manager",
+  "seo",
   "sales",
   "marketing",
   "investment",

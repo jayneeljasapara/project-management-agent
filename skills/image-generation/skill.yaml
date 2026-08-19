@@ -1,5 +1,5 @@
 id: image-generation
-agent: marketing
+agent: seo
 name: Image Generation
 version: 1.0.0
 description: Turn a request for a picture into one on-brand image saved for review, never published.

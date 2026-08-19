@@ -31,6 +31,35 @@
       ]
     },
     {
+      "id": "seo",
+      "name": "Scout",
+      "description": "The talent scout. Researches your market, finds keyword openings, writes SEO articles, and makes the images for them.",
+      "status": "active",
+      "accentColour": "sky",
+      "workflowPath": "/webhook/chat",
+      "examplePrompts": [
+        "Research my website and show me article ideas",
+        "Write me an SEO article from the strongest idea",
+        "Generate a header image for that article"
+      ],
+      "settingsFields": [
+        {
+          "id": "researchDomain",
+          "label": "The website you want researched",
+          "description": "Your main public domain for market and keyword research.",
+          "kind": "line",
+          "maxLength": 300
+        },
+        {
+          "id": "articleVoice",
+          "label": "How your articles should read",
+          "description": "Tone, structure, and words to avoid in written articles.",
+          "kind": "block",
+          "maxLength": 800
+        }
+      ]
+    },
+    {
       "id": "sales",
       "name": "Closer",
       "description": "The finisher. Researches prospects, drafts replies, and turns calls into proposals.",
@@ -62,7 +91,7 @@
     {
       "id": "marketing",
       "name": "Coach",
-      "description": "The coach. Plans campaigns and writes grounded content and SEO articles from researched evidence.",
+      "description": "The coach. Plans campaigns and turns supplied or researched evidence into grounded marketing content.",
       "status": "active",
       "accentColour": "amber",
       "workflowPath": "/webhook/chat",

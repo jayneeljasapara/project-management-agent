@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import type { AgentSettingFieldDefinition } from "./agent-settings.js";
 
 export type AgentStatus = "active" | "coming-soon";
-export type AgentAccent = "violet" | "teal" | "amber" | "emerald" | "rose";
+export type AgentAccent = "violet" | "teal" | "amber" | "emerald" | "rose" | "sky";
 
 export interface AgentDefinition {
   id: string;
@@ -31,6 +31,7 @@ const ACCENTS = new Set<AgentAccent>([
   "amber",
   "emerald",
   "rose",
+  "sky",
 ]);
 
 export const DEFAULT_AGENTS: readonly AgentDefinition[] = Object.freeze([
